@@ -1,5 +1,5 @@
-function [session,basename, basepath,clusteringpath] = db_set_path(varargin)
-% Loads a session from the database
+function [session,basename, basepath,clusteringpath] = db_set_session(varargin)
+% Loads a session from the database or defines paths for existing session struct
 % INPUTS
 % varargin described below
 %
@@ -11,13 +11,13 @@ function [session,basename, basepath,clusteringpath] = db_set_path(varargin)
 
 % By Peter Petersen
 % petersen.peter@gmail.com
-% Last edited: 15-06-2019
+% Last edited: 07-11-2019
 
 p = inputParser;
 % Inputs
-addParameter(p,'id',[],@isnumeric);             % DB numeric ID
-addParameter(p,'session',[],@isstr);            % DB session name
-addParameter(p,'sessionstruct',[],@isstruct);   % session struct (can be used to generate the paths)
+addParameter(p,'sessionId',[],@isnumeric);  % DB numeric ID
+addParameter(p,'sessionName',[],@isstr); % DB session name
+addParameter(p,'session',[],@isstruct); % session struct (can be used to generate the paths)
 
 % Parameters
 addParameter(p,'saveMat',true,@islogical);      % Saves the session struct to a mat file
@@ -26,25 +26,25 @@ addParameter(p,'loadBuzcode',false,@islogical);  % Loads and saves select info f
 
 parse(p,varargin{:})
 
-id = p.Results.id;
-sessionin = p.Results.session;
-sessionstruct = p.Results.sessionstruct;
+sessionId = p.Results.sessionId;
+sessionName = p.Results.sessionName;
+session = p.Results.session;
 saveMat = p.Results.saveMat;
 changeDir = p.Results.changeDir;
 loadBuzcode = p.Results.loadBuzcode;
 
-if ~isempty(id)
-    sessions = db_load_sessions('id',id);
+if ~isempty(sessionId)
+    sessions = db_load_sessions('sessionId',sessionId);
     if isempty(sessions)
         return
     end
-elseif ~isempty(sessionin)
-    sessions = db_load_sessions('session',sessionin);
+elseif ~isempty(sessionName)
+    sessions = db_load_sessions('sessionName',sessionName);
     if isempty(sessions)
         return
     end
 else
-    sessions{1} = sessionstruct;
+    sessions{1} = session;
 end
 db_settings = db_load_settings;
 defined_repositories = fieldnames(db_settings.repositories);
@@ -66,15 +66,16 @@ for i = 1:length(sessions)
         basepath = fullfile(db_settings.repositories.(session.general.repositories{1}), session.animal.name, session.general.name);
     end
     
-    if ~isempty(session.spikeSorting.relativePath)
-        clusteringpath = fullfile(basepath, session.spikeSorting.relativePath{1});
+    if ~isempty(session.spikeSorting{1}.relativePath)
+        clusteringpath = session.spikeSorting{1}.relativePath;
     else
-        clusteringpath = basepath;
+        clusteringpath = '';
     end
     session.general.baseName = basename;
     session.general.basePath =  basepath;
     session.general.clusteringPath = clusteringpath;
     if ~isfield(session.extracellular,'leastSignificantBit') || session.extracellular.leastSignificantBit==0
+        disp('''session.extracellular.leastSignificantBit'' set to default for intan system = 0.195 µV/bit')
     	session.extracellular.leastSignificantBit = 0.195; % Intan system = 0.195 µV/bit
     end
     
@@ -90,7 +91,7 @@ for i = 1:length(sessions)
     % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
     % Loading parameters from sessionInfo (Buzcode)
     % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
-    if loadBuzcode & exist('bz_getSessionInfo.m','file')
+    if loadBuzcode && exist('bz_getSessionInfo.m','file')
         sessionInfo = bz_getSessionInfo(session.general.basePath,'noPrompts',true);
         session.extracellular.nChannels = sessionInfo.nChannels; % Number of channels
         session.extracellular.nSpikeGroups = sessionInfo.spikeGroups.nGroups; % Number of spike groups
@@ -103,14 +104,15 @@ for i = 1:length(sessions)
         [stat,mess]=fileattrib(fullfile(basepath, 'session.mat'));
         if stat==0
             try
-                save(fullfile(basepath, 'session.mat'),'session','-v7.3','-nocompression');
+                disp(['Saving ',basename,'.session.mat file to basepath'])
+                save(fullfile(basepath, [basename,'.session.mat']),'session','-v7.3','-nocompression');
             catch
-                warning('Failed to save session.mat. Location not available');
+                warning(['Failed to save ',basename,'.session.mat. Location not available']);
             end
         elseif mess.UserWrite
-            save(fullfile(basepath, 'session.mat'),'session','-v7.3','-nocompression');
+            save(fullfile(basepath, [basename,'.session.mat']),'session','-v7.3','-nocompression');
         else
-            warning('Unable to write to session.mat. No writing permissions.');
+            warning(['Unable to write to ',basename,'.session.mat. No writing permissions.']);
         end
     end
     if length(sessions)>1
