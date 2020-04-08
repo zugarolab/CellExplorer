@@ -1,4 +1,4 @@
-function cell_metrics_batch = LoadCellMetricBatch(varargin)
+function cell_metrics_batch = LoadCellMetricsBatch(varargin)
 % Load metrics across sessions and concats the metrics into a single struct
 % with the appropriate format for each field.
 %
@@ -13,11 +13,15 @@ function cell_metrics_batch = LoadCellMetricBatch(varargin)
 % Last edited: 13-03-2020
 
 % - Example calls:
-% LoadCellMetricBatch('basepaths',{'path1','[path1'})      % Load batch from a list with paths
-% LoadCellMetricBatch('clusteringpaths',{'path1','path1'}) % Load batch from a list with paths
-% LoadCellMetricBatch('sessions',{'rec1','rec2'})          % Load batch from database
-% LoadCellMetricBatch('sessionIDs',[10985,10985])          % Load session from database session id
+% LoadCellMetricsBatch('basepaths',{'path1','[path1'})      % Load batch from a list with paths
+% LoadCellMetricsBatch('clusteringpaths',{'path1','path1'}) % Load batch from a list with paths
+% LoadCellMetricsBatch('sessions',{'rec1','rec2'})          % Load batch from database
+% LoadCellMetricsBatch('sessionIDs',[10985,10985])          % Load session from database session id
 
+
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % 
+% Handling inputs
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % 
 p = inputParser;
 addParameter(p,'sessionIDs',{},@isnumeric);     % numeric IDs for the sessions to load
 addParameter(p,'sessions',{},@iscell);          % sessionNames for the sessions to load
@@ -48,6 +52,8 @@ if ishandle(waitbar_handle)
 else
     f_LoadCellMetrics = waitbar(0,' ','name','Cell-metrics: loading batch');
 end
+
+cell_metrics_type_struct = {'general','acg','isi','waveforms','putativeConnections','firingRateMaps','responseCurves','events','manipulations','tags','groups','groundTruthClassification'};
 
 % disp('Cell-metrics: loading batch')
 if ~isempty(sessionNames)
@@ -127,6 +133,9 @@ else
     warning('Input not sufficient')
 end
 
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % 
+% Loading cell_metircs file batch
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % 
 for iii = 1:length(clustering_paths)
     if ~isempty(basenames) && ishandle(f_LoadCellMetrics)
         waitbar((iii+count_metricsLoad)/(1+count_metricsLoad+length(clustering_paths)),f_LoadCellMetrics,[num2str(iii), '/', num2str(length(basenames)),': ', basenames{iii}]);
@@ -154,9 +163,13 @@ subfieldstypes(contains(cell_metrics_fieldnames,{'truePositive','falsePositive'}
 subfieldssizes(contains(cell_metrics_fieldnames,{'truePositive','falsePositive'})) = [];
 cell_metrics_fieldnames(contains(cell_metrics_fieldnames,{'truePositive','falsePositive'})) = [];
 
+subfieldstypes(ismember(cell_metrics_fieldnames,cell_metrics_type_struct)) = {'struct'};
 h = 0;
 cell_metrics_batch = [];
 
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % 
+% Creating cell_metrics_batch from individual session cell_metrics
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 if ishandle(f_LoadCellMetrics)
     waitbar((count_metricsLoad+length(cell_metrics2))/(1+count_metricsLoad+length(cell_metrics2)),f_LoadCellMetrics,['Concatenating files']);
 end
@@ -168,10 +181,13 @@ for iii = 1:length(cell_metrics2)
     end
     cell_metrics = cell_metrics2{iii}.cell_metrics;
     hh = size(cell_metrics.cellID,2);
+    cell_metrics = verifyGroupFormat(cell_metrics,'tags');
+    cell_metrics = verifyGroupFormat(cell_metrics,'groundTruthClassification');
     if iii == 1
         cell_metrics_batch = cell_metrics;
         cell_metrics_batch = rmfield(cell_metrics_batch,'general');
         cell_metrics_batch.general.basename = 'Batch of sessions';
+        
     end
     cell_metrics_batch.batchIDs(h+1:hh+h) = iii*ones(1,hh);
     cell_metrics_batch.general.batch{iii} = cell_metrics.general;
@@ -194,6 +210,19 @@ for iii = 1:length(cell_metrics2)
                 end
                 if isfield(cell_metrics.putativeConnections,'inhibitory') && iii > 1 && isfield(cell_metrics_batch,'putativeConnections') && isfield(cell_metrics,'putativeConnections')
                     cell_metrics_batch.putativeConnections.inhibitory = [cell_metrics_batch.putativeConnections.inhibitory; cell_metrics.putativeConnections.inhibitory+h];
+                end
+            elseif ismember(cell_metrics_fieldnames{ii},{'groups','tags','groundTruthClassification'})
+                if isfield(cell_metrics,cell_metrics_fieldnames{ii})
+                    fields1 = fieldnames(cell_metrics.(cell_metrics_fieldnames{ii}));
+                    if  iii > 1
+                        for k = 1:numel(fields1)
+                            if isfield(cell_metrics_batch,cell_metrics_fieldnames{ii}) && isfield(cell_metrics_batch.(cell_metrics_fieldnames{ii}),fields1{k})
+                                cell_metrics_batch.(cell_metrics_fieldnames{ii}).(fields1{k}) = [cell_metrics_batch.(cell_metrics_fieldnames{ii}).(fields1{k}), cell_metrics.(cell_metrics_fieldnames{ii}).(fields1{k})+h];
+                            else
+                                cell_metrics_batch.(cell_metrics_fieldnames{ii}).(fields1{k}) = cell_metrics.(cell_metrics_fieldnames{ii}).(fields1{k})+h;
+                            end
+                        end
+                    end
                 end
             else
                 if ~isfield(cell_metrics,cell_metrics_fieldnames{ii})
@@ -231,10 +260,11 @@ for iii = 1:length(cell_metrics2)
                                         
                                     end
                                 elseif structFieldsSize{k}(1)>1 %&& ~any(strcmp(cell_metrics_fieldnames{ii}, {'firing_rate_map','firing_rate_map_states'}))
-                                    cell_metrics_batch.(cell_metrics_fieldnames{ii}).(structFields{k})(:,h+1:hh+h) = cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k});
-                                    
-                                elseif structFieldsSize{k}(1)>1 %&& any(strcmp(cell_metrics_fieldnames{ii}, {'firing_rate_map','firing_rate_map_states'}))
-                                    cell_metrics_batch.(cell_metrics_fieldnames{ii}).(structFields{k}){iii} = cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k});
+                                    if ~isfield(cell_metrics_batch.(cell_metrics_fieldnames{ii}),(structFields{k})) ||  size(cell_metrics_batch.(cell_metrics_fieldnames{ii}).(structFields{k}),1) == size(cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k}),1)
+                                        cell_metrics_batch.(cell_metrics_fieldnames{ii}).(structFields{k})(:,h+1:hh+h) = cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k});
+                                    end
+%                                 elseif structFieldsSize{k}(1)>1 %&& any(strcmp(cell_metrics_fieldnames{ii}, {'firing_rate_map','firing_rate_map_states'}))
+%                                     cell_metrics_batch.(cell_metrics_fieldnames{ii}).(structFields{k}){iii} = cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k});
                                 else
                                     if ~isempty(cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k}))
                                         if size(cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k}),2) == hh && size(cell_metrics.(cell_metrics_fieldnames{ii}).(structFields{k}),1) == 1

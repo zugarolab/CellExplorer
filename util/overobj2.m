@@ -26,6 +26,9 @@ y = (p(2)-figPos(2));
 
 % Loop over all figure descendants
 c = findobj(get(fig,'Children'),varargin{:});
+try
+    c = fig.Children(1).Children(2).Children(2).Children;
+end
 for h = c'
     % If descendant contains the mouse pointer position, exit
     r = getpixelposition(h);  % Note: cache this for improved performance

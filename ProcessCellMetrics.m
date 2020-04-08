@@ -1,4 +1,4 @@
-function cell_metrics = calc_CellMetrics(varargin)
+function cell_metrics = ProcessCellMetrics(varargin)
 %   This function calculates cell metrics for a given recording/session
 %   Most metrics are single value per cell, either numeric or string type, but
 %   certain metrics are vectors like the autocorrelograms or cell with double content like waveforms.
@@ -48,11 +48,11 @@ function cell_metrics = calc_CellMetrics(varargin)
 %   debugMode              - logical. Activate a debug mode avoiding try/catch 
 %
 % - Example calls:
-% cell_metrics = calc_CellMetrics                             % Load from current path, assumed to be a basepath
-% cell_metrics = calc_CellMetrics('session',session)          % Load session from session struct
-% cell_metrics = calc_CellMetrics('basepath',basepath)        % Load from basepath
-% cell_metrics = calc_CellMetrics('sessionName','rec1')       % Load session from database session name
-% cell_metrics = calc_CellMetrics('sessionID',10985)          % Load session from database session id
+% cell_metrics = ProcessCellMetrics                             % Load from current path, assumed to be a basepath
+% cell_metrics = ProcessCellMetrics('session',session)          % Load session from session struct
+% cell_metrics = ProcessCellMetrics('basepath',basepath)        % Load from basepath
+% cell_metrics = ProcessCellMetrics('sessionName','rec1')       % Load session from database session name
+% cell_metrics = ProcessCellMetrics('sessionID',10985)          % Load session from database session id
 %
 %   % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 %   OUTPUT
@@ -290,7 +290,7 @@ if parameters.saveBackup && ~isempty(cell_metrics)
     dispLog(['Creating backup of existing user adjustable metrics ''',backupDirectory,'''']);
     
     
-    backupFields = {'labels','tags','deepSuperficial','deepSuperficialDistance','brainRegion','putativeCellType','groundTruthClassification'};
+    backupFields = {'labels','tags','deepSuperficial','deepSuperficialDistance','brainRegion','putativeCellType','groundTruthClassification','groups'};
     temp = {};
     for i = 1:length(backupFields)
         if isfield(cell_metrics,backupFields{i})
@@ -1269,7 +1269,7 @@ end
 % Adding processing info
 % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 cell_metrics.general.processinginfo.params = parameters;
-cell_metrics.general.processinginfo.function = 'calc_CellMetrics';
+cell_metrics.general.processinginfo.function = 'ProcessCellMetrics';
 cell_metrics.general.processinginfo.date = now;
 cell_metrics.general.processinginfo.version = 2.1;
 try
@@ -1289,51 +1289,7 @@ end
 % Verifying metrics struct
 % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 dispLog('Verifying metrics struct');
-% Defining field types of standard metrics
-cell_metrics_type_struct = {'general','acg','isi','waveforms','putativeConnections','firingRateMaps','responseCurves','events','manipulations'};
-cell_metrics_type_cell = {'brainRegion','animal','sex','species','strain','geneticLine','labels','putativeCellType','deepSuperficial','synapticEffect'};
-cell_metrics_type_numeric = {'spikeGroup','spikeCount','firingRate','cv2','refractoryPeriodViolation','burstIndex_Mizuseki2012','thetaModulationIndex','acg_tau_rise',...
-    'acg_tau_decay','acg_tau_burst','acg_refrac','acg_fit_rsquare','burstIndex_Royer2012','burstIndex_Doublets','synapticConnectionsIn','synapticConnectionsOut','maxWaveformCh',...
-    'maxWaveformCh1','troughToPeak','ab_ratio','peakVoltage','isolationDistance','lRatio','ripples_modulationIndex','ripples_modulationPeakResponseTime','deepSuperficialDistance',...
-    'thetaPhasePeak','thetaPhaseTrough','thetaEntrainment','thetaModulationIndex','spatialCoverageIndex','spatialGiniCoeff','spatialCoherence','spatialPeakRate', 'placeFieldsCount',...
-    'placeCell','firingRateGiniCoeff','firingRateStd','firingRateInstability','peakVoltage_expFitLengthConstant'};
-
-cell_metrics_fieldnames = fieldnames(cell_metrics);
-cell_metrics_types = struct2cell(structfun(@class,cell_metrics,'UniformOutput',false));
-cell_metrics_sizes = cell2mat(struct2cell(structfun(@size, cell_metrics,'UniformOutput',false)));
-cell_metrics_numeric_cell = find(ismember(cell_metrics_types,{'double','cell'}));
-cell_metrics_numeric = find(ismember(cell_metrics_types,{'double'}));
-cell_metrics_cell = find(ismember(cell_metrics_types,{'cell'}));
-fields_struct = find(ismember(cell_metrics_types,'struct'));
-
-% Verifying struct type
-if ~any(ismember(cell_metrics_types((ismember(cell_metrics_fieldnames,cell_metrics_type_struct))),'struct'))
-    error(['struct field not formatted correctly in cell_metrics'])
-end
-% Verifying numeric type
-if ~any(ismember(cell_metrics_types((ismember(cell_metrics_fieldnames,cell_metrics_type_numeric))),'double'))
-    error(['numeric field not formatted correctly in cell_metrics'])
-end
-% Verifying cell type
-if ~any(ismember(cell_metrics_types((ismember(cell_metrics_fieldnames,cell_metrics_type_cell))),'cell'))
-    error(['cell array field not formatted correctly in cell_metrics'])
-end
-% Verifying field sizes
-if any(cell_metrics_sizes(cell_metrics_numeric_cell,1) ~= 1) || any(cell_metrics_sizes(cell_metrics_numeric_cell,2) ~= cell_metrics.general.cellCount)
-    error(['cell_metrics field not formatted correctly'])
-end
-% Verifying struct fields
-for i = 1:length(fields_struct)
-    if ~strcmp(cell_metrics_fieldnames{fields_struct(i)},{'general','putativeConnections'})
-        field_fieldnames = fieldnames(cell_metrics.(cell_metrics_fieldnames{fields_struct(i)}));
-        field_types = struct2cell(structfun(@class,cell_metrics.(cell_metrics_fieldnames{fields_struct(i)}),'UniformOutput',false));
-        field_sizes = cell2mat(struct2cell(structfun(@size, cell_metrics.(cell_metrics_fieldnames{fields_struct(i)}),'UniformOutput',false)));
-        field_numeric_cell = find(ismember(field_types,{'double','cell'}));
-        if any(field_sizes(field_numeric_cell,2) ~= cell_metrics.general.cellCount)
-            error(['cell_metrics field not formatted correctly'])
-        end
-    end
-end
+verifyCellMetricsStruct(cell_metrics);
 
 %% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 % Saving cells
