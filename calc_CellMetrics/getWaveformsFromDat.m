@@ -1,4 +1,4 @@
-function spikes = getAllWaveformsFromDat(spikes,session,unitsToProcess)
+function spikes = getWaveformsFromDat(spikes,session,unitsToProcess)
 % Extracts raw waveforms from the binary file. 
 % This function is a part of CellExplorer: https://cellexplorer.org/
 %
@@ -139,7 +139,6 @@ for i = 1:length(unitsToProcess)
     spikes.timeWaveform{ii} = ([-ceil(wfWinKeep*sr)*(1/sr):1/sr:(ceil(wfWinKeep*sr)-1)*(1/sr)])*1000;
     spikes.timeWaveform_all{ii} = ([-ceil(1.5*wfWinKeep*sr)*(1/sr):1/sr:(ceil(1.5*wfWinKeep*sr)-1)*(1/sr)])*1000;
     spikes.peakVoltage(ii) = range(spikes.filtWaveform{ii});
-    spikes.peakVoltage_all{ii} = range(spikes.filtWaveform_all{ii},2)';
     spikes.channels_all{ii} = [1:nChannels];
     
     [B,I] = sort(range(spikes.filtWaveform_all{ii}(goodChannels,:),2),'descend');
