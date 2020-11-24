@@ -1,4 +1,4 @@
-function preferences = ProcessCellMetrics_Preferences(session)
+function preferences = preferences_ProcessCellMetrics(session)
 % Preferences loaded by ProcessCellMetrics
 %
 % Check the website of CellExplorer for more details: https://cellexplorer.org/
@@ -15,8 +15,8 @@ preferences.loadSpikes.labelsToRead = {'good'};     % allows you to load units w
 
 % Waveform
 preferences.waveform.nPull = 600;               % number of spikes to pull out (default: 600)
-preferences.waveform.wfWin_sec = 0.004;         % Larger size of waveform windows for filterning. total width in ms
-preferences.waveform.wfWinKeep = 0.0008;        % half width in ms
+preferences.waveform.wfWin_sec = 0.004;         % Larger size of waveform windows for filterning. total width in seconds
+preferences.waveform.wfWinKeep = 0.0008;        % half width of the waveform extracted in seconds
 preferences.waveform.showWaveforms = true;
 
 % PSTHs / Events / Manipulations
@@ -64,8 +64,8 @@ preferences.theta.min_spikes = 500;      % only calculated if the unit has above
 % % % % % % % % % % % % % % % % % % % % 
 % You may edit above preferences or provide your own preferences in a separate file.
 % Provide the path to your preferences as an analysis tag in the session struct: 
-% session.analysisTags.ProcessCellMetrics_preferences = 'user_preferences.user_preferences'; % loads the user_preference.m file from the folder +user_preferences
+% session.analysisTags.preferences_ProcessCellMetrics = 'user_preferences.user_preferences'; % loads the user_preference.m file from the folder +user_preferences
 
-if exist('session','var') && isfield(session,'analysisTags') && isfield(session.analysisTags,'ProcessCellMetrics_preferences') && exist(session.analysisTags.ProcessCellMetrics_preferences,'file')
-    preferences = feval(session.analysisTags.ProcessCellMetrics_preferences,preferences,session);
+if exist('session','var') && isfield(session,'analysisTags') && isfield(session.analysisTags,'preferences_ProcessCellMetrics') && ~isempty(which(session.analysisTags.preferences_ProcessCellMetrics))
+    preferences = feval(session.analysisTags.preferences_ProcessCellMetrics,preferences,session);
 end
