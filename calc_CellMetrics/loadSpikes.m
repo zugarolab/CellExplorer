@@ -721,6 +721,10 @@ if parameters.forceReload
 
             for k = 1:length(electrodeGroups)
                 electrodeGroup = electrodeGroups(k);
+                if ~exist(fullfile(clusteringpath_full, [basename '.clu.' num2str(electrodeGroup)]),'file'),
+                    disp(['.clu.' num2str(electrodeGroup) ' file not found. Skipping electrode group #' num2str(electrodeGroup) '/' num2str(length(electrodeGroups))])
+                    continue;
+                end
                 disp(['Loading electrode group #' num2str(electrodeGroup) '/' num2str(length(electrodeGroups)) ])
                 if ~raw_clusters
                     cluster_index = load(fullfile(clusteringpath_full, [basename '.clu.' num2str(electrodeGroup)]));
@@ -748,6 +752,7 @@ if parameters.forceReload
                     [spikes.ts{UID},~] = uniquetol(spikes.ts{UID},tol_samples,'DataScale',1); % unique values within tol (<= 0.8ms)
                     spikes.times{UID} = spikes.ts{UID}/session.extracellular.sr;
                     spikes.shankID(UID) = electrodeGroup;
+                    spikes.hexatrode(UID) = electrodeGroup;
                     spikes.cluID(UID) = nb_clusters2(i);
                     spikes.cluster_index(UID) = nb_clusters2(i);
                     spikes.total(UID) = length(spikes.ts{UID});
