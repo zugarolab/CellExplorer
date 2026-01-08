@@ -13,8 +13,8 @@ function session = sessionTemplate(input1,varargin)
 %    - Set default animal metadata (name, species, strain)
 %    - Set default extracellular metadata
 %    - Other parameters specified in this script.
-% 
-% You can create your own custom template, simply by generating a new templatescript from this file and change the defaults accordingly 
+%
+% You can create your own custom template, simply by generating a new templatescript from this file and change the defaults accordingly
 % E.g. : session = sessionTemplateCustom(input1,varargin)
 %
 % - Example calls:
@@ -28,6 +28,7 @@ addParameter(p,'basename',[],@isstr);
 addParameter(p,'importSkippedChannels',true,@islogical); % Import skipped channels from the xml as bad channels
 addParameter(p,'importSyncedChannels',true,@islogical);  % Import channel not synchronized between electrode groups and spike groups as bad channels
 addParameter(p,'showGUI',false,@islogical);              % Show the session gui
+addParameter(p,'remove_folder_date',false,@islogical);   % removes folder date metadata from epoch name (default:false)
 
 % Parsing inputs
 parse(p,input1,varargin{:})
@@ -35,6 +36,7 @@ basename = p.Results.basename;
 importSkippedChannels = p.Results.importSkippedChannels;
 importSyncedChannels = p.Results.importSyncedChannels;
 showGUI = p.Results.showGUI;
+remove_folder_date = p.Results.remove_folder_date;
 
 % Initializing session struct and defining basepath, if not specified as an input
 if ischar(input1)
@@ -112,7 +114,7 @@ defaults.extracellular.srLfp = 1250;         % Sampling rate of LFP data
 defaults.extracellular.nChannels = 64;       % number of channels
 defaults.extracellular.fileName = '';        % (optional) file name of raw data if different from basename.dat
 defaults.extracellular.electrodeGroups.channels = {[1:defaults.extracellular.nChannels]}; %creating a default list of channels. Please change according to your own layout. 
-defaults.extracellular.leastSignificantBit = 0.195; % (in µV) Intan = 0.195, Amplipex = 0.3815
+defaults.extracellular.leastSignificantBit = 0.195; % (in microV) Intan = 0.195, Amplipex = 0.3815
 defaults.extracellular.probeDepths = 0;
 defaults.extracellular.precision = 'int16';
 
@@ -145,7 +147,7 @@ if ~isfield(session,'spikeSorting')
     end
     % Verify that the path contains Kilosort and phy output files
     if exist(fullfile(basepath,relativePath,'spike_times.npy'),'file')
-        % Phy and KiloSort 
+        % Phy and KiloSort
         disp('Spike sorting data detected: Phy')
         session.spikeSorting{1}.relativePath = relativePath;
         session.spikeSorting{1}.format = 'Phy';
@@ -193,11 +195,11 @@ if ~isfield(session,'spikeSorting')
 end
 
 % % % % % % % % % % % % % % % % % % % % % % % % % % % %
-% Default brain regions 
+% Default brain regions
 % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 % Brain regions  must be defined as index 1. Can be specified on a channel or electrode group basis (below example for CA1 across all channels)
 % session.brainRegions.CA1.channels = 1:128; % Brain region acronyms from Allan institute: http://atlas.brain-map.org/atlas?atlas=1)
-% session.brainRegions.CA1.electrodeGroups = 1:8; 
+% session.brainRegions.CA1.electrodeGroups = 1:8;
 
 
 % % % % % % % % % % % % % % % % % % % % % % % % % % % %
@@ -218,7 +220,7 @@ end
 % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 if ~isfield(session,'extracellular') || ~isfield(session.extracellular,'chanCoords') 
     session.extracellular.chanCoords.layout = 'poly2'; % Probe layout: linear,staggered,poly2,edge,poly3,poly5
-    session.extracellular.chanCoords.verticalSpacing = 10; % (µm) Vertical spacing between sites.
+    session.extracellular.chanCoords.verticalSpacing = 10; % (microm) Vertical spacing between sites.
 end
 
 % % % % % % % % % % % % % % % % % % % % % % % % % % % %
@@ -354,13 +356,48 @@ if isfield(sessionInfo,'region')
     end
 end
 
-% Epochs derived from MergePoints
-if exist(fullfile(basepath,[session.general.name,'.MergePoints.events.mat']),'file')
-    load(fullfile(basepath,[session.general.name,'.MergePoints.events.mat']),'MergePoints')
-    for i = 1:size(MergePoints.foldernames,2)
-        session.epochs{i}.name =  MergePoints.foldernames{i};
-        session.epochs{i}.startTime =  MergePoints.timestamps(i,1);
-        session.epochs{i}.stopTime =  MergePoints.timestamps(i,2);
+% Add epoch data from mergePoints
+% this first section will remove date metadata if you choose
+if remove_folder_date 
+    % Epochs derived from MergePoints
+    fun_idx2logical = @(index,nElements) logical(accumarray(Restrict(index,[1 nElements]),1,[nElements 1]));
+    % find the date if it's in the filename (following the format YYMMDD_HHMMSS)
+    fun_dateIndex = @(x) strfind(ismember(x,'1234567890'),[ones(1,6) 0 ones(1,6)]);
+    % check if a date exists
+    fun_existsdate = @(x) any(fun_dateIndex(x));
+    % flag the characters around the date (character before the date, typically "_" and the date itself).
+    fun_isdate = @(x) fun_idx2logical(min(fun_dateIndex(x))+(-1:12)', length(x));
+    % find the index of the "d" in "day"
+    fun_dayIndex = @(x) strfind(lower(x),'day');
+    % check if the string "day" exists in the filename
+    fun_existday = @(x) any(fun_dayIndex(x));
+    % find which characters are part of the dayX/dayXX expression (by finding the next non-numeric character following "day")
+    fun_isday = @(x) fun_idx2logical(min(strfind(x,'day'))+(0:find(~ismember([x(min(strfind(x,'day')+3):end),'a'],'1234567890'),1)+2)',length(x));
+    
+    if exist(fullfile(basepath,[session.general.name,'.MergePoints.events.mat']),'file')
+        load(fullfile(basepath,[session.general.name,'.MergePoints.events.mat']),'MergePoints')
+        for i = 1:size(MergePoints.foldernames,2)
+            session.epochs{i}.name =  MergePoints.foldernames{i};
+            % remove the date from the "epochs" suggestion
+            while fun_existsdate(session.epochs{i}.name)
+                session.epochs{i}.name = session.epochs{i}.name(~fun_isdate(session.epochs{i}.name));
+            end
+            % remove the date from the "epochs" suggestion
+            while fun_existday(session.epochs{i}.name)
+                session.epochs{i}.name = session.epochs{i}.name(~fun_isday(session.epochs{i}.name));
+            end
+            session.epochs{i}.startTime = MergePoints.timestamps(i,1);
+            session.epochs{i}.stopTime = MergePoints.timestamps(i,2);
+        end
+    end
+else
+    if exist(fullfile(basepath,[session.general.name,'.MergePoints.events.mat']),'file')
+        load(fullfile(basepath,[session.general.name,'.MergePoints.events.mat']),'MergePoints')
+        for i = 1:size(MergePoints.foldernames,2)
+            session.epochs{i}.name =  MergePoints.foldernames{i};
+            session.epochs{i}.startTime =  MergePoints.timestamps(i,1);
+            session.epochs{i}.stopTime =  MergePoints.timestamps(i,2);
+        end
     end
 end
 
@@ -409,7 +446,7 @@ if (importSkippedChannels || importSyncedChannels) && exist(fullfile(session.gen
     
     % Importing notes
     try
-    	if isfield(session.general,'notes')
+        if isfield(session.general,'notes')
             session.general.notes = [session.general.notes,'   Notes from xml: ',rxml.child(1).child(3).value,'   Description: ' rxml.child(1).child(4).value];
         else
             session.general.notes = ['Notes: ',rxml.child(1).child(3).value,'   Description from xml: ' rxml.child(1).child(4).value];
@@ -418,7 +455,7 @@ if (importSkippedChannels || importSyncedChannels) && exist(fullfile(session.gen
     
     % Importing experimenters
     try
-    	if ~isfield(session.general,'experimenters') || isempty(session.general.experimenters)
+        if ~isfield(session.general,'experimenters') || isempty(session.general.experimenters)
             session.general.experimenters = rxml.child(1).child(2).value;
         end
     end
